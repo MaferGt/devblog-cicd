@@ -1,0 +1,88 @@
+name: DevBlog CI/CD Pipeline
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  # ---------------------------------------------------------
+  # ETAPA 1: TESTING (Ejecuta tus 26 pruebas)
+  # ---------------------------------------------------------
+  test:
+    name: Run Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run Pytest
+        run: |
+          python -m pytest -v
+
+  # ---------------------------------------------------------
+  # ETAPA 2: DOCKER (Construye la imagen)
+  # ---------------------------------------------------------
+  docker-build:
+    name: Build Docker Image
+    runs-on: ubuntu-latest
+    needs: test # Solo se ejecuta si la etapa de test pasa
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Build Docker Image
+        run: |
+          docker build -t devblog:latest .
+
+  # ---------------------------------------------------------
+  # ETAPA 3: SEGURIDAD (Escaneo de código y dependencias)
+  # ---------------------------------------------------------
+  security:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install security tools
+        run: |
+          pip install safety bandit
+
+      - name: Run Safety (Escaneo de dependencias)
+        run: safety check -r requirements.txt || true # Solo alerta, no rompe el pipeline
+
+      - name: Run Bandit (Escaneo de código estático)
+        run: bandit -r app/ || true # Solo alerta, no rompe el pipeline
+
+  # ---------------------------------------------------------
+  # ETAPA 4: DESPLIEGUE (Simulación inicial)
+  # ---------------------------------------------------------
+  deploy:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    needs: [test, docker-build, security] # Necesita que TODO lo anterior pase
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    steps:
+      - name: Deploy Notification
+        run: |
+          echo "Todos los checks pasaron correctamente."
+          echo "Preparando el despliegue para producción..."
